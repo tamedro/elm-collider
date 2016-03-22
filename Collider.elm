@@ -15,12 +15,7 @@ import Html.Attributes exposing (..)
 (gameWidth,gameHeight) = (600,400)
 (halfWidth,halfHeight) = (300,200)
 
-type alias Ball =
-  { x : Float
-  , y : Float
-  , vx : Float
-  , vy : Float
-  }
+-- types 
 
 type State = Play | Pause
 
@@ -29,24 +24,46 @@ type alias Game =
   , balls : List Ball
   }
 
+type alias Ball =
+  { x : Float
+  , y : Float
+  , vx : Float
+  , vy : Float
+  , r : Float
+  }
+
+type alias Input =
+  { delta : Time
+  }
+
+-- defaults
+
 defaultGame : Game
 defaultGame =
   { state = Pause
   , balls = []
   }
 
-type alias Input =
-  { space : Bool
-  , enter : Bool
-  , dir1 : Int
-  , dir2 : Int
-  , delta : Time
+defaultBall : Ball
+defaultBall =
+  { x = 0
+  , y = 0
+  , vx = -100
+  , vy = -100
+  , r = 15 
   }
   
 -- Update
+
 update : Input -> Game -> Game
-update {space,enter,dir1,dir2,delta} ({state,balls} as game) =
+update {delta} ({state,balls} as game) =
     game
+
+{-
+  Adds a  ball to the list of balls
+-}
+addBalls : List Ball -> List Ball
+addBalls balls = defaultBall :: balls
     
 -- View
 
@@ -77,11 +94,7 @@ delta =
 input : Signal Input
 input =
   Signal.sampleOn delta <|
-    Signal.map5 Input
-      Keyboard.space
-      Keyboard.enter
-      (Signal.map .y Keyboard.wasd)
-      (Signal.map .y Keyboard.arrows)
+    Signal.map Input
       delta
       
 -- Styling
