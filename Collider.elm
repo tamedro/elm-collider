@@ -5,8 +5,10 @@ import Keyboard
 import Text
 import Time exposing (..)
 import Window
-import Html exposing (div, button, text)
+import Html exposing (..)
 import Html.Events exposing (onClick)
+import Html exposing (Html, Attribute, text, toElement, div, input)
+import Html.Attributes exposing (..)
 
 -- Model
 
@@ -48,14 +50,17 @@ update {space,enter,dir1,dir2,delta} ({state,balls} as game) =
     
 -- View
 
-
 view : (Int,Int) -> Game -> Element
 view (w,h) game =
-  container w h middle <|
-    collage gameWidth gameHeight
-      [ rect gameWidth gameHeight
+  flow down [
+    (container w h middle <|
+      collage gameWidth gameHeight
+        [ rect gameWidth gameHeight
           |> filled (rgb 60 60 60)
-      ]
+        ]
+    )
+    , toElement 100 100 (button [buttonStyle] [Html.text "+"])
+  ]
 
 -- Signals
 
@@ -78,3 +83,21 @@ input =
       (Signal.map .y Keyboard.wasd)
       (Signal.map .y Keyboard.arrows)
       delta
+      
+-- Styling
+buttonStyle : Attribute
+buttonStyle =
+  style
+    [ ("background-color", "#4CAF50")
+    , ("border", "none")
+    , ("color", "white")
+    , ("padding", "10px 32px")
+    , ("text-align", "center")
+    , ("text-decoration", "none")
+    , ("display", "inline-block")
+    , ("font-size", "16px")
+    , ("position", "absolute")
+    , ("left", "50%")
+    , ("transform", "translate(-50%,-50%)")
+    ]
+
