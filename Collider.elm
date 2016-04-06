@@ -18,10 +18,6 @@ import StartApp.Simple exposing (start)
 
 -- types 
 
-type State = Play | Pause
-
-type Debug = Message | Nothing
-
 type alias Game =
   { state : Bool
   , balls : List Ball
@@ -30,7 +26,8 @@ type alias Game =
   }
 
 type alias Ball =
-  { x : Float
+  { id : Int
+  , x : Float
   , y : Float
   , vx : Float
   , vy : Float
@@ -63,9 +60,10 @@ defaultGame =
   , gun = defaultGun
   }
 
-defaultBall : Ball
-defaultBall =
-  { x = 0
+defaultBall : Int -> Ball
+defaultBall num =
+  { id = num
+  , x = 0
   , y = 0
   , vx = -100
   , vy = -100
@@ -80,8 +78,8 @@ defaultGun =
 
 -- Update
 
-update : Signal.Address Bool ->Update -> Game -> Game
-update address {clickButton, input} ({state,balls,debug,gun} as game) =
+update : Update -> Game -> Game
+update {clickButton, input} ({state,balls,debug,gun} as game) =
   let
     newBalls =
       if clickButton /= state then
@@ -92,7 +90,7 @@ update address {clickButton, input} ({state,balls,debug,gun} as game) =
     newState = clickButton
     
     newGun = spinGun gun
-    
+
   in 
     {
       game |
@@ -101,47 +99,55 @@ update address {clickButton, input} ({state,balls,debug,gun} as game) =
         state = newState
     }
 
-{-
-  Adds a  ball to the list of balls
--}
 addBalls : List Ball -> List Ball
-addBalls balls = defaultBall :: balls
+addBalls balls = defaultBall (List.length balls) :: balls
 
 spinGun : Gun -> Gun
 spinGun gun = 
     { gun | dir = ((gun.dir + gun.rotSpeed) % 360) }
+
+-- Utilities
+formBall : Ball -> Form
+formBall ball = 
+  oval ball.r ball.r 
+    |> filled white
+    |> move (ball.x, ball.y)
+
+ballElement : Ball -> Element
+ballElement ball =
+  toElement 50 50 <| div [style (centerStyle ++ ballStyle)] [Html.text <| toString ball.id]
     
 -- View
 
-view : Signal.Address Bool -> Bool -> (Int,Int) -> Game -> Element
-view address message (w,h) game =
-  flow down [
+view : (Int,Int) -> Game -> Element
+view (w,h) game =
+  flow down ([
     (container w h middle <|
       collage gameWidth gameHeight
-        [ rect gameWidth gameHeight
+        ([ rect gameWidth gameHeight
           |> filled (rgb 60 60 60)
         , rect 1 10
           |> filled red          
-          |> rotate (0 - (degrees (toFloat game.gun.dir)))
-        ]
+          |> rotate (0 - (degrees <| toFloat game.gun.dir))
+        ] ++ List.map formBall game.balls)
     )
-    , toElement 100 100 (button [buttonStyle, onClick address (not game.state)] [Html.text (toString (List.length game.balls))])
-    , toElement 100 100 (div [] [Html.text game.debug])
-  ]
-
-
-mb : Signal.Mailbox Bool
-mb =
-  Signal.mailbox False
+    , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick mb.address <| not game.state] 
+                                [Html.text "+"]
+    , toElement 10 10 <| div [] [Html.text game.debug]
+  ] ++ List.map ballElement game.balls)
 
 -- Signals
 
 main =
-  Signal.map3 (view mb.address) mb.signal Window.dimensions gameState 
+  Signal.map2 view Window.dimensions gameState 
 
 gameState : Signal Game
 gameState =
-  Signal.foldp (update mb.address) defaultGame input 
+  Signal.foldp update defaultGame input 
+
+mb : Signal.Mailbox Bool
+mb =
+  Signal.mailbox False
 
 delta =
   Signal.map inSeconds (fps 35)
@@ -156,9 +162,16 @@ input =
         Keyboard.enter)
 
 -- Styling
-buttonStyle : Attribute
+
+centerStyle : List (String, String)
+centerStyle =
+    [ ("position", "absolute")
+    , ("left", "50%")
+    , ("transform", "translate(-50%,-50%)")
+    ]
+
+buttonStyle : List (String, String)
 buttonStyle =
-  style
     [ ("background-color", "#4CAF50")
     , ("border", "none")
     , ("color", "white")
@@ -167,8 +180,16 @@ buttonStyle =
     , ("text-decoration", "none")
     , ("display", "inline-block")
     , ("font-size", "16px")
-    , ("position", "absolute")
-    , ("left", "50%")
-    , ("transform", "translate(-50%,-50%)")
     ]
 
+ballStyle : List (String, String)
+ballStyle = 
+    [ ("border-style", "solid")
+    , ("padding", "10px 32px")
+    , ("text-align", "center")
+    , ("text-decoration", "none")
+    , ("font-size", "16px")
+    , ("left", "50%")
+    , ("width", "200px")
+    , ("margin", "5px")
+    ]
