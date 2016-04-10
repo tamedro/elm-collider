@@ -39,15 +39,20 @@ type alias Gun =
   , rotSpeed : Int
   }
 
-type alias Update =
+type alias UpdateInputs =
   { clickButton : Bool
-  , input : Input
+  , ballSignal : String
+  , inputs : Inputs
   }
 
-type alias Input =
+type alias Inputs =
   { delta : Time
   , enter : Bool
-  --, add : Bool
+  }
+  
+type alias BallSignal =
+  { radius : String
+  , id : Int
   }
 
 -- defaults
@@ -78,8 +83,8 @@ defaultGun =
 
 -- Update
 
-update : Update -> Game -> Game
-update {clickButton, input} ({state,balls,debug,gun} as game) =
+update : UpdateInputs -> Game -> Game
+update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   let
     newBalls =
       if clickButton /= state then
@@ -105,22 +110,11 @@ addBalls balls = defaultBall (List.length balls) :: balls
 spinGun : Gun -> Gun
 spinGun gun = 
     { gun | dir = ((gun.dir + gun.rotSpeed) % 360) }
-
--- Utilities
-formBall : Ball -> Form
-formBall ball = 
-  oval ball.r ball.r 
-    |> filled white
-    |> move (ball.x, ball.y)
-
-ballElement : Ball -> Element
-ballElement ball =
-  toElement 50 50 <| div [style (centerStyle ++ ballStyle)] [Html.text <| toString ball.id]
     
 -- View
 
-view : (Int,Int) -> Game -> Element
-view (w,h) game =
+--view : (Int,Int) -> Game -> Element
+view ballSignal (w,h) game =
   flow down ([
     (container w h middle <|
       collage gameWidth gameHeight
@@ -134,30 +128,60 @@ view (w,h) game =
     , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick mb.address <| not game.state] 
                                 [Html.text "+"]
     , toElement 10 10 <| div [] [Html.text game.debug]
-  ] ++ List.map ballElement game.balls)
+  ] ++ List.map ballDiv game.balls)
+
+-- View Utilities
+
+formBall : Ball -> Form
+formBall ball = 
+  oval ball.r ball.r 
+    |> filled white
+    |> move (ball.x, ball.y)
+
+ballDiv : Ball -> Element
+ballDiv ball =
+  let evth = Html.Events.on "change" Html.Events.targetValue (Signal.message mbox.address)
+  in
+  toElement 50 50 <| div [style (centerStyle ++ ballStyle)] 
+    [ div [style innerBallStyle] [ Html.text <| toString ball.id ]
+    , input 
+        [ type' "range"
+        , Html.Attributes.min "0"
+        , Html.Attributes.max "20"
+        , value <| toString ball.r
+        , evth
+        ] []
+    ]
+--toElement 50 50 <| div [style (centerStyle ++ ballStyle)] [Html.text <| toString ball.id]
+
 
 -- Signals
 
 main =
-  Signal.map2 view Window.dimensions gameState 
+  Signal.map3 view mbox.signal Window.dimensions gameState 
 
 gameState : Signal Game
 gameState =
-  Signal.foldp update defaultGame input 
+  Signal.foldp update defaultGame inputs
 
 mb : Signal.Mailbox Bool
 mb =
   Signal.mailbox False
+  
+mbox = 
+  Signal.mailbox "0"
+  --Signal.mailbox {radius = "0", id = 0}
 
 delta =
   Signal.map inSeconds (fps 35)
 
-input : Signal Update
-input =
-  Signal.map2 Update
+inputs : Signal UpdateInputs
+inputs =
+  Signal.map3 UpdateInputs
     mb.signal
+    mbox.signal
     (Signal.sampleOn delta <|
-      Signal.map2 Input
+      Signal.map2 Inputs
         delta
         Keyboard.enter)
 
@@ -185,7 +209,10 @@ buttonStyle =
 ballStyle : List (String, String)
 ballStyle = 
     [ ("border-style", "solid")
-    , ("padding", "10px 32px")
+    , ("padding-top", "10px")
+    , ("padding-bottom", "10px")
+    , ("padding-left", "10px")
+    , ("padding-right", "20px")
     , ("text-align", "center")
     , ("text-decoration", "none")
     , ("font-size", "16px")
@@ -193,3 +220,11 @@ ballStyle =
     , ("width", "200px")
     , ("margin", "5px")
     ]
+ 
+innerBallStyle : List (String, String)
+innerBallStyle = 
+  [ ("display", "inline-block")
+  , ("text-align", "center")
+  , ("float", "left")
+  , ("padding-left", "15px")
+  ]
