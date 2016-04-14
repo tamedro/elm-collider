@@ -86,11 +86,7 @@ defaultGun =
 update : UpdateInputs -> Game -> Game
 update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   let
-    newBalls =
-      if clickButton /= state then
-        addBalls balls
-      else 
-        balls
+    newBalls = updateBalls (clickButton /= state) inputs.delta balls
     
     newState = clickButton
     
@@ -104,12 +100,48 @@ update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
         state = newState
     }
 
-addBalls : List Ball -> List Ball
-addBalls balls = defaultBall (List.length balls) :: balls
+updateBalls : Bool -> Time -> List Ball -> List Ball
+updateBalls add dt balls =
+    if add then
+      defaultBall (List.length balls) :: balls
+    else 
+      List.map (updateBall dt) balls
+
+updateBall : Time -> Ball -> Ball
+updateBall dt ball =
+  if not (near 0 halfWidth ball.x) then
+    { ball | x = 0, y = 0 }
+  else
+    physicsUpdate dt
+      { ball |
+          vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7),
+          vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
+      }
+      
+physicsUpdate dt obj =
+  { obj |
+      x = obj.x + obj.vx * dt,
+      y = obj.y + obj.vy * dt
+  }
+
+stepV v lowerCollision upperCollision =
+  if lowerCollision then
+      abs v
+
+  else if upperCollision then
+      -(abs v)
+
+  else
+      v
+
+near k c n =
+  n >= k-c && n <= k+c
 
 spinGun : Gun -> Gun
 spinGun gun = 
-    { gun | dir = ((gun.dir + gun.rotSpeed) % 360) }
+    { gun | 
+      dir = ((gun.dir + gun.rotSpeed) % 360) 
+    }
     
 -- View
 
