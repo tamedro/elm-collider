@@ -33,6 +33,9 @@ type alias Ball =
   , vy : Float
   , r : Float
   , c : Color
+  , col : Bool
+  , colx : Float
+  , coly : Float
   }
 
 type alias Gun =
@@ -75,6 +78,9 @@ defaultBall num =
   , vy = -100
   , r = 10
   , c = white
+  , col = False
+  , colx = 0
+  , coly = 0
   }
 
 defaultGun : Gun
@@ -110,16 +116,22 @@ updateBalls add dt balls =
 
 updateBall : Time -> List Ball -> Ball -> Ball
 updateBall dt balls ball =
-  physicsUpdate dt
-    { ball |
-      c = 
-        if collision balls ball then
-          red
-        else
-          white
-      , vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7)
-      , vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
-    }
+  let
+    collidedBalls = colliders balls ball
+  in 
+    physicsUpdate dt
+      { ball |
+        col = List.length collidedBalls >= 1
+        , colx = if List.length collidedBalls >= 1 then xpoint ball collidedBalls else 5
+        , coly = if List.length collidedBalls >= 1 then ypoint ball collidedBalls else 5
+        , c = 
+            if List.length collidedBalls >= 1 then
+              red
+            else
+              white
+        , vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7)
+        , vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
+      }
   
 collision : List Ball -> Ball -> Bool
 collision balls ball =
@@ -127,7 +139,11 @@ collision balls ball =
 
 colliders : List Ball -> Ball -> List Ball
 colliders balls ball = 
-  List.filter (collide ball) balls
+  removeSelf (List.filter (collide ball) balls) ball
+
+removeSelf : List Ball -> Ball -> List Ball
+removeSelf balls ball =
+  List.filter (\x -> x.id /= ball.id) balls
 
 collide : Ball -> Ball -> Bool
 collide ball1 ball2 =
@@ -136,6 +152,26 @@ collide ball1 ball2 =
 distance : Ball -> Ball -> Float
 distance ball1 ball2 =
   Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
+
+xpoint : Ball -> List Ball -> Float
+xpoint ball balls =
+  let 
+    oBallM = List.head balls
+  in
+    case oBallM of
+      Just oBall -> ((ball.x * oBall.r) + (oBall.x * ball.r)) / (ball.r + oBall.r)
+
+      Nothing -> 0
+      
+ypoint : Ball -> List Ball -> Float
+ypoint ball balls =
+  let 
+    oBallM = List.head balls
+  in
+    case oBallM of
+      Just oBall -> ((ball.y * oBall.r) + (oBall.y * ball.r)) / (ball.r + oBall.r)
+
+      Nothing -> 0
 
 physicsUpdate dt obj =
   { obj |
@@ -173,7 +209,7 @@ view ballSignal (w,h) game =
         , rect 1 10
           |> filled red          
           |> rotate (0 - (degrees <| toFloat game.gun.dir))
-        ] ++ List.map formBall game.balls)
+        ] ++ List.map formBall game.balls ++ List.map formCollisions game.balls)
     )
     , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick mb.address <| not game.state] 
                                 [Html.text "+"]
@@ -187,6 +223,14 @@ formBall ball =
   oval (2*ball.r) (2*ball.r) 
     |> filled ball.c
     |> move (ball.x, ball.y)
+
+formCollisions : Ball -> Form
+formCollisions ball =
+  if ball.col then
+    oval 5 5 
+      |> filled blue
+      |> move (ball.colx, ball.coly)
+  else oval 0 0 |> filled white
 
 ballDiv : Ball -> Element
 ballDiv ball =
