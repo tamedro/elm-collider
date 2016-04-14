@@ -32,6 +32,7 @@ type alias Ball =
   , vx : Float
   , vy : Float
   , r : Float
+  , c : Color
   }
 
 type alias Gun =
@@ -72,7 +73,8 @@ defaultBall num =
   , y = 0
   , vx = -100
   , vy = -100
-  , r = 15 
+  , r = 10
+  , c = white
   }
 
 defaultGun : Gun
@@ -86,18 +88,17 @@ defaultGun =
 update : UpdateInputs -> Game -> Game
 update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   let
-    newBalls = updateBalls (clickButton /= state) inputs.delta balls
+    newBalls = updateBalls (clickButton /= state) inputs.delta game.balls
     
     newState = clickButton
     
     newGun = spinGun gun
 
   in 
-    {
-      game |
-        gun = newGun,
-        balls = newBalls,
-        state = newState
+    { game |
+      gun = newGun,
+      balls = newBalls,
+      state = newState
     }
 
 updateBalls : Bool -> Time -> List Ball -> List Ball
@@ -105,19 +106,37 @@ updateBalls add dt balls =
     if add then
       defaultBall (List.length balls) :: balls
     else 
-      List.map (updateBall dt) balls
+      List.map (updateBall dt balls) balls
 
-updateBall : Time -> Ball -> Ball
-updateBall dt ball =
-  if not (near 0 halfWidth ball.x) then
-    { ball | x = 0, y = 0 }
-  else
-    physicsUpdate dt
-      { ball |
-          vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7),
-          vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
-      }
-      
+updateBall : Time -> List Ball -> Ball -> Ball
+updateBall dt balls ball =
+  physicsUpdate dt
+    { ball |
+      c = 
+        if collision balls ball then
+          red
+        else
+          white
+      , vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7)
+      , vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
+    }
+  
+collision : List Ball -> Ball -> Bool
+collision balls ball =
+  List.length (colliders balls ball) > 1
+
+colliders : List Ball -> Ball -> List Ball
+colliders balls ball = 
+  List.filter (collide ball) balls
+
+collide : Ball -> Ball -> Bool
+collide ball1 ball2 =
+  (distance ball1 ball2) <= (ball1.r + ball2.r)
+
+distance : Ball -> Ball -> Float
+distance ball1 ball2 =
+  Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
+
 physicsUpdate dt obj =
   { obj |
       x = obj.x + obj.vx * dt,
@@ -145,7 +164,6 @@ spinGun gun =
     
 -- View
 
---view : (Int,Int) -> Game -> Element
 view ballSignal (w,h) game =
   flow down ([
     (container w h middle <|
@@ -166,8 +184,8 @@ view ballSignal (w,h) game =
 
 formBall : Ball -> Form
 formBall ball = 
-  oval ball.r ball.r 
-    |> filled white
+  oval (2*ball.r) (2*ball.r) 
+    |> filled ball.c
     |> move (ball.x, ball.y)
 
 ballDiv : Ball -> Element
@@ -184,8 +202,6 @@ ballDiv ball =
         , evth
         ] []
     ]
---toElement 50 50 <| div [style (centerStyle ++ ballStyle)] [Html.text <| toString ball.id]
-
 
 -- Signals
 
@@ -202,7 +218,6 @@ mb =
   
 mbox = 
   Signal.mailbox "0"
-  --Signal.mailbox {radius = "0", id = 0}
 
 delta =
   Signal.map inSeconds (fps 35)
