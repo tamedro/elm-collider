@@ -21,6 +21,7 @@ import StartApp.Simple exposing (start)
 type alias Game =
   { state : Bool
   , balls : List Ball
+  , collisions : List Collision
   , debug : String
   , gun : Gun
   }
@@ -36,6 +37,11 @@ type alias Ball =
   , col : Bool
   , colx : Float
   , coly : Float
+  }
+
+type alias Collision = 
+  { b1 : Ball
+  , b2 : Ball
   }
 
 type alias Gun =
@@ -59,12 +65,18 @@ type alias BallSignal =
   , id : Int
   }
 
+type alias Velocity =
+  { vx : Float
+  , vy : Float
+  }
+
 -- defaults
 
 defaultGame : Game
 defaultGame =
   { state = False
   , balls = []
+  , collisions = []
   , debug = ""
   , gun = defaultGun
   }
@@ -89,57 +101,78 @@ defaultGun =
   , rotSpeed = 5
   }
 
+defaultCollision : Ball -> Ball -> Collision
+defaultCollision ball1 ball2 =
+  { b1 = ball1
+  , b2 = ball2
+  }
+
 -- Update
 
 update : UpdateInputs -> Game -> Game
 update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   let
-    newBalls = updateBalls (clickButton /= state) inputs.delta game.balls
-    
     newState = clickButton
-    
     newGun = spinGun gun
-
+    updateCollisions = collisions balls
   in 
     { game |
       gun = newGun,
-      balls = newBalls,
+      balls = updateBalls (clickButton /= state) inputs.delta game.balls updateCollisions,
       state = newState
     }
 
-updateBalls : Bool -> Time -> List Ball -> List Ball
-updateBalls add dt balls =
+updateBalls : Bool -> Time -> List Ball -> List Collision -> List Ball
+updateBalls add dt balls updateCollisions =
     if add then
       defaultBall (List.length balls) :: balls
     else 
-      List.map (updateBall dt balls) balls
+      List.map (updateBall dt balls updateCollisions) balls
 
-updateBall : Time -> List Ball -> Ball -> Ball
-updateBall dt balls ball =
+updateBall : Time -> List Ball -> List Collision -> Ball -> Ball
+updateBall dt balls updateCollisions ball =
   let
-    collidedBalls = colliders balls ball
+    didCollide = collided updateCollisions ball
+    collisionM = thisCollision updateCollisions ball
+    newVelocity = stepVelocity collisionM ball
   in 
-    physicsUpdate dt
+    physicsUpdate dt didCollide
       { ball |
-        col = List.length collidedBalls >= 1
-        , colx = if List.length collidedBalls >= 1 then xpoint ball collidedBalls else 5
-        , coly = if List.length collidedBalls >= 1 then ypoint ball collidedBalls else 5
+        col = didCollide
         , c = 
-            if List.length collidedBalls >= 1 then
+            if didCollide then
               red
             else
-              white
-        , vx = stepV ball.vx (ball.x < 7 - halfWidth) (ball.x > halfWidth - 7)
-        , vy = stepV ball.vy (ball.y < 7 - halfHeight) (ball.y > halfHeight - 7)
+              white 
+        , vx = newVelocity.vx
+        , vy = newVelocity.vy
       }
   
-collision : List Ball -> Ball -> Bool
-collision balls ball =
-  List.length (colliders balls ball) > 1
+collided : List Collision -> Ball -> Bool
+collided collidedBalls ball =
+  let 
+    colM = thisCollision collidedBalls ball
+  in
+    case colM of 
+      Just col -> True
+      Nothing -> False
 
-colliders : List Ball -> Ball -> List Ball
-colliders balls ball = 
-  removeSelf (List.filter (collide ball) balls) ball
+thisCollision : List Collision -> Ball -> Maybe Collision
+thisCollision collisions ball =
+  List.head <| List.filter (\c -> c.b1.id == ball.id || c.b2.id == ball.id) collisions
+
+collisions : List Ball -> List Collision
+collisions balls = 
+  List.filterMap (collision balls) balls
+
+collision : List Ball -> Ball -> Maybe Collision
+collision balls ball = 
+  let 
+    colliderM = List.head <| removeSelf (List.filter (collide ball) balls) ball
+  in
+    case colliderM of
+    Just oBall -> Just <| defaultCollision ball oBall
+    Nothing -> Nothing
 
 removeSelf : List Ball -> Ball -> List Ball
 removeSelf balls ball =
@@ -153,42 +186,71 @@ distance : Ball -> Ball -> Float
 distance ball1 ball2 =
   Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
 
-xpoint : Ball -> List Ball -> Float
-xpoint ball balls =
+physicsUpdate dt didCollide obj =
   let 
-    oBallM = List.head balls
+    jumpX =
+      if didCollide then
+        obj.vx
+      else 
+        0
+    jumpY =
+      if didCollide then
+        obj.vy
+      else
+        0
   in
-    case oBallM of
-      Just oBall -> ((ball.x * oBall.r) + (oBall.x * ball.r)) / (ball.r + oBall.r)
+    { obj |
+        x = obj.x + obj.vx * dt,
+        y = obj.y + obj.vy * dt
+    }
 
-      Nothing -> 0
-      
-ypoint : Ball -> List Ball -> Float
-ypoint ball balls =
+stepVelocity : Maybe Collision -> Ball -> Velocity
+stepVelocity collisionM ball =
   let 
-    oBallM = List.head balls
+    newVx = 
+      if (ball.x < 7 - halfWidth) then
+        abs ball.vx
+      else if (ball.x > halfWidth - 7) then 
+        -(abs ball.vx)
+      else
+        case collisionM of
+          Just collision -> collisionVelocity collision ball
+          Nothing -> ball.vx
+    newVy =
+      if (ball.y < 7 - halfHeight) then
+        abs ball.vy
+      else if (ball.y > halfHeight - 7) then
+        -(abs ball.vy)
+      else
+        case collisionM of
+          Just collision -> collisionVelocityY collision ball
+          Nothing -> ball.vy
+  in 
+    { vx = newVx , vy = newVy }
+ 
+
+collisionVelocity : Collision -> Ball -> Float
+collisionVelocity collision ball =
+  let
+    oball = 
+      if (collision.b1.id == ball.id) then 
+        collision.b2
+      else 
+        collision.b1
   in
-    case oBallM of
-      Just oBall -> ((ball.y * oBall.r) + (oBall.y * ball.r)) / (ball.r + oBall.r)
-
-      Nothing -> 0
-
-physicsUpdate dt obj =
-  { obj |
-      x = obj.x + obj.vx * dt,
-      y = obj.y + obj.vy * dt
-  }
-
-stepV v lowerCollision upperCollision =
-  if lowerCollision then
-      abs v
-
-  else if upperCollision then
-      -(abs v)
-
-  else
-      v
-
+    ((ball.vx * (ball.r - oball.r)) + (2 * oball.r * oball.vx)) / (ball.r + oball.r)
+    
+collisionVelocityY : Collision -> Ball -> Float
+collisionVelocityY collision ball =
+  let
+    oball = 
+      if (collision.b1.id == ball.id) then 
+        collision.b2
+      else 
+        collision.b1
+  in
+    ((ball.vy * (ball.r - oball.r)) + (2 * oball.r * oball.vy)) / (ball.r + oball.r)    
+    
 near k c n =
   n >= k-c && n <= k+c
 
