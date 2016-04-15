@@ -187,18 +187,12 @@ distance ball1 ball2 =
   Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
 
 physicsUpdate dt didCollide obj =
-  let 
-    jumpX =
-      if didCollide then
-        obj.vx
-      else 
-        0
-    jumpY =
-      if didCollide then
-        obj.vy
-      else
-        0
-  in
+  if didCollide then
+    { obj |
+        x = obj.x + 2 * obj.vx * dt,
+        y = obj.y + 2 * obj.vy * dt
+    }
+  else
     { obj |
         x = obj.x + obj.vx * dt,
         y = obj.y + obj.vy * dt
