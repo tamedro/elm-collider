@@ -81,13 +81,13 @@ defaultGame =
   , gun = defaultGun
   }
 
-defaultBall : Int -> Ball
-defaultBall num =
+defaultBall : Gun -> Int -> Ball
+defaultBall gun num =
   { id = num
   , x = 0
   , y = 0
-  , vx = -100
-  , vy = -100
+  , vx = 100 * (cos <| (degrees <| toFloat gun.dir + 90))
+  , vy = 100 * (sin <| (degrees <| toFloat gun.dir + 90))
   , r = 10
   , c = white
   , col = False
@@ -118,16 +118,19 @@ update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   in 
     { game |
       gun = newGun,
-      balls = updateBalls (clickButton /= state) inputs.delta game.balls updateCollisions,
+      balls = updateBalls game.gun (clickButton /= state) inputs.delta game.balls updateCollisions,
       state = newState
     }
 
-updateBalls : Bool -> Time -> List Ball -> List Collision -> List Ball
-updateBalls add dt balls updateCollisions =
+updateBalls : Gun -> Bool -> Time -> List Ball -> List Collision -> List Ball
+updateBalls gun add dt balls updateCollisions =
+  let newballs = 
     if add then
-      defaultBall (List.length balls) :: balls
+      defaultBall gun (List.length balls) :: balls
     else 
-      List.map (updateBall dt balls updateCollisions) balls
+      balls
+  in
+    List.map (updateBall dt newballs updateCollisions) newballs
 
 updateBall : Time -> List Ball -> List Collision -> Ball -> Ball
 updateBall dt balls updateCollisions ball =
@@ -138,8 +141,7 @@ updateBall dt balls updateCollisions ball =
   in 
     physicsUpdate dt didCollide
       { ball |
-        col = didCollide
-        , c = 
+        c = 
             if didCollide then
               red
             else
@@ -187,33 +189,29 @@ distance ball1 ball2 =
   Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
 
 physicsUpdate dt didCollide obj =
-  if didCollide then
+  let factor = if didCollide then 2 else 1 
+  in
     { obj |
-        x = obj.x + 2 * obj.vx * dt,
-        y = obj.y + 2 * obj.vy * dt
-    }
-  else
-    { obj |
-        x = obj.x + obj.vx * dt,
-        y = obj.y + obj.vy * dt
+        x = obj.x + factor * obj.vx * dt,
+        y = obj.y + factor * obj.vy * dt
     }
 
 stepVelocity : Maybe Collision -> Ball -> Velocity
 stepVelocity collisionM ball =
   let 
-    newVx = 
-      if (ball.x < 7 - halfWidth) then
+    newVx = a
+      if (ball.x < ball.r - halfWidth) then
         abs ball.vx
-      else if (ball.x > halfWidth - 7) then 
+      else if (ball.x > halfWidth - ball.r) then 
         -(abs ball.vx)
       else
         case collisionM of
           Just collision -> collisionVelocity collision ball
           Nothing -> ball.vx
     newVy =
-      if (ball.y < 7 - halfHeight) then
+      if (ball.y < ball.r - halfHeight) then
         abs ball.vy
-      else if (ball.y > halfHeight - 7) then
+      else if (ball.y > halfHeight - ball.r) then
         -(abs ball.vy)
       else
         case collisionM of
