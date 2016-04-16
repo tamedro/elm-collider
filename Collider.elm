@@ -114,7 +114,7 @@ update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   let
     newState = clickButton
     newGun = spinGun gun
-    updateCollisions = collisions balls
+    updateCollisions = collisions <| List.map (physicsUpdate inputs.delta) balls
   in 
     { game |
       gun = newGun,
@@ -139,7 +139,7 @@ updateBall dt balls updateCollisions ball =
     collisionM = thisCollision updateCollisions ball
     newVelocity = stepVelocity collisionM ball
   in 
-    physicsUpdate dt didCollide
+    physicsUpdate dt
       { ball |
         c = 
             if didCollide then
@@ -188,18 +188,16 @@ distance : Ball -> Ball -> Float
 distance ball1 ball2 =
   Basics.sqrt ((ball2.x-ball1.x)^2 + (ball2.y-ball1.y)^2)
 
-physicsUpdate dt didCollide obj =
-  let factor = if didCollide then 2 else 1 
-  in
-    { obj |
-        x = obj.x + factor * obj.vx * dt,
-        y = obj.y + factor * obj.vy * dt
-    }
+physicsUpdate dt obj =
+  { obj |
+    x = obj.x + obj.vx * dt,
+    y = obj.y + obj.vy * dt
+  }
 
 stepVelocity : Maybe Collision -> Ball -> Velocity
 stepVelocity collisionM ball =
   let 
-    newVx = a
+    newVx = 
       if (ball.x < ball.r - halfWidth) then
         abs ball.vx
       else if (ball.x > halfWidth - ball.r) then 
