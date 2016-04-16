@@ -3,6 +3,7 @@ import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
 import Keyboard
 import Text
+import String
 import Time exposing (..)
 import Window
 import Html exposing (..)
@@ -37,6 +38,7 @@ type alias Ball =
   , col : Bool
   , colx : Float
   , coly : Float
+  , mes : String
   }
 
 type alias Collision = 
@@ -51,7 +53,7 @@ type alias Gun =
 
 type alias UpdateInputs =
   { clickButton : Bool
-  , ballSignal : String
+  , ballSignal : RadiusMessage
   , inputs : Inputs
   }
 
@@ -60,9 +62,9 @@ type alias Inputs =
   , enter : Bool
   }
   
-type alias RadiusSignal =
-  { radius : String
-  , id : Int
+type alias RadiusMessage =
+  { id : Int 
+  , radius : String
   }
 
 type alias Velocity =
@@ -93,6 +95,7 @@ defaultBall gun num =
   , col = False
   , colx = 0
   , coly = 0
+  , mes = "None"
   }
 
 defaultGun : Gun
@@ -107,6 +110,18 @@ defaultCollision ball1 ball2 =
   , b2 = ball2
   }
 
+defaultMessage : RadiusMessage 
+defaultMessage = 
+  { id = 0
+  , radius = "5"
+  }
+  
+makeMessage : Int -> String -> RadiusMessage
+makeMessage idIn radiusIn =
+  { id = idIn
+  , radius = radiusIn
+  }
+  
 -- Update
 
 update : UpdateInputs -> Game -> Game
@@ -118,38 +133,45 @@ update {clickButton, ballSignal, inputs} ({state,balls,debug,gun} as game) =
   in 
     { game |
       gun = newGun,
-      balls = updateBalls game.gun (clickButton /= state) inputs.delta game.balls updateCollisions,
+      balls = updateBalls game.gun (clickButton /= state) inputs.delta game.balls updateCollisions ballSignal,
       state = newState
     }
 
-updateBalls : Gun -> Bool -> Time -> List Ball -> List Collision -> List Ball
-updateBalls gun add dt balls updateCollisions =
+updateBalls : Gun -> Bool -> Time -> List Ball -> List Collision -> RadiusMessage -> List Ball
+updateBalls gun add dt balls updateCollisions ballSignal =
   let newballs = 
     if add then
       defaultBall gun (List.length balls) :: balls
     else 
       balls
   in
-    List.map (updateBall dt newballs updateCollisions) newballs
+    List.map (updateBall dt newballs updateCollisions ballSignal) newballs
 
-updateBall : Time -> List Ball -> List Collision -> Ball -> Ball
-updateBall dt balls updateCollisions ball =
+updateBall : Time -> List Ball -> List Collision -> RadiusMessage -> Ball -> Ball
+updateBall dt balls updateCollisions ballSignal ball =
   let
     didCollide = collided updateCollisions ball
     collisionM = thisCollision updateCollisions ball
     newVelocity = stepVelocity collisionM ball
+    newRadius = if ballSignal.id == ball.id then 
+                  case String.toFloat ballSignal.radius of
+                     Ok float -> float
+                     Err mes -> 20
+                else ball.r
+    newMessage = if ballSignal.id == ball.id then 
+                  case String.toFloat ballSignal.radius of
+                     Ok float -> toString float
+                     Err mes -> mes
+                else "No match"
   in 
     physicsUpdate dt
       { ball |
-        c = 
-            if didCollide then
-              red
-            else
-              white 
-        , vx = newVelocity.vx
+          vx = newVelocity.vx
         , vy = newVelocity.vy
+        , r = newRadius
+        , mes = newMessage
       }
-  
+
 collided : List Collision -> Ball -> Bool
 collided collidedBalls ball =
   let 
@@ -258,9 +280,6 @@ view ballSignal (w,h) game =
       collage gameWidth gameHeight
         ([ rect gameWidth gameHeight
           |> filled (rgb 60 60 60)
-        , rect 1 10
-          |> filled red          
-          |> rotate (0 - (degrees <| toFloat game.gun.dir))
         ] ++ List.map formBall game.balls ++ List.map formCollisions game.balls)
     )
     , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick addSignal.address <| not game.state] 
@@ -286,19 +305,22 @@ formCollisions ball =
 
 ballDiv : Ball -> Element
 ballDiv ball =
-  let evth = Html.Events.on "change" Html.Events.targetValue (Signal.message radiusSignal.address)
-  in
   toElement 50 50 <| div [style (centerStyle ++ ballStyle)] 
     [ div [style innerBallStyle] [ Html.text <| toString ball.id ]
     , input 
         [ type' "range"
+        , Html.Attributes.step "1"
         , Html.Attributes.min "0"
         , Html.Attributes.max "20"
         , value <| toString ball.r 
-        , evth
+        , Html.Events.on "change" Html.Events.targetValue (\str -> Signal.message radiusSignal.address (makeMessage ball.id str))
         ] []
     ]
-
+  
+makeSignalMessage : Int -> Signal.Address RadiusMessage -> String -> Signal.Message
+makeSignalMessage ballId address radius = 
+  Signal.message address <| makeMessage ballId radius
+  
 -- Signals
 
 main =
@@ -309,11 +331,9 @@ gameState =
   Signal.foldp update defaultGame inputs
 
 addSignal : Signal.Mailbox Bool
-addSignal =
-  Signal.mailbox False
+addSignal = Signal.mailbox False
 
-radiusSignal = 
-  Signal.mailbox "0"
+radiusSignal = Signal.mailbox defaultMessage
 
 delta =
   Signal.map inSeconds (fps 35)
