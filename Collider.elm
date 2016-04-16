@@ -60,7 +60,7 @@ type alias Inputs =
   , enter : Bool
   }
   
-type alias BallSignal =
+type alias RadiusSignal =
   { radius : String
   , id : Int
   }
@@ -86,9 +86,9 @@ defaultBall gun num =
   { id = num
   , x = 0
   , y = 0
-  , vx = 100 * (cos <| (degrees <| toFloat gun.dir + 90))
-  , vy = 100 * (sin <| (degrees <| toFloat gun.dir + 90))
-  , r = 10
+  , vx = 200 * (cos <| (degrees <| toFloat gun.dir + 90))
+  , vy = 200 * (sin <| (degrees <| toFloat gun.dir + 90))
+  , r = 5
   , c = white
   , col = False
   , colx = 0
@@ -263,7 +263,7 @@ view ballSignal (w,h) game =
           |> rotate (0 - (degrees <| toFloat game.gun.dir))
         ] ++ List.map formBall game.balls ++ List.map formCollisions game.balls)
     )
-    , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick mb.address <| not game.state] 
+    , toElement 10 50 <| button [style (buttonStyle ++ centerStyle), onClick addSignal.address <| not game.state] 
                                 [Html.text "+"]
     , toElement 10 10 <| div [] [Html.text game.debug]
   ] ++ List.map ballDiv game.balls)
@@ -286,7 +286,7 @@ formCollisions ball =
 
 ballDiv : Ball -> Element
 ballDiv ball =
-  let evth = Html.Events.on "change" Html.Events.targetValue (Signal.message mbox.address)
+  let evth = Html.Events.on "change" Html.Events.targetValue (Signal.message radiusSignal.address)
   in
   toElement 50 50 <| div [style (centerStyle ++ ballStyle)] 
     [ div [style innerBallStyle] [ Html.text <| toString ball.id ]
@@ -294,7 +294,7 @@ ballDiv ball =
         [ type' "range"
         , Html.Attributes.min "0"
         , Html.Attributes.max "20"
-        , value <| toString ball.r
+        , value <| toString ball.r 
         , evth
         ] []
     ]
@@ -302,17 +302,17 @@ ballDiv ball =
 -- Signals
 
 main =
-  Signal.map3 view mbox.signal Window.dimensions gameState 
+  Signal.map3 view radiusSignal.signal Window.dimensions gameState 
 
 gameState : Signal Game
 gameState =
   Signal.foldp update defaultGame inputs
 
-mb : Signal.Mailbox Bool
-mb =
+addSignal : Signal.Mailbox Bool
+addSignal =
   Signal.mailbox False
-  
-mbox = 
+
+radiusSignal = 
   Signal.mailbox "0"
 
 delta =
@@ -321,8 +321,8 @@ delta =
 inputs : Signal UpdateInputs
 inputs =
   Signal.map3 UpdateInputs
-    mb.signal
-    mbox.signal
+    addSignal.signal
+    radiusSignal.signal
     (Signal.sampleOn delta <|
       Signal.map2 Inputs
         delta
