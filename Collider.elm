@@ -158,18 +158,12 @@ updateBall dt balls updateCollisions ballSignal ball =
                      Ok float -> float
                      Err mes -> 20
                 else ball.r
-    newMessage = if ballSignal.id == ball.id then 
-                  case String.toFloat ballSignal.radius of
-                     Ok float -> toString float
-                     Err mes -> mes
-                else "No match"
   in 
     physicsUpdate dt
       { ball |
           vx = newVelocity.vx
         , vy = newVelocity.vy
         , r = newRadius
-        , mes = newMessage
       }
 
 collided : List Collision -> Ball -> Bool
@@ -274,7 +268,7 @@ spinGun gun =
     
 -- View
 
-view ballSignal (w,h) game =
+view (w,h) game =
   flow down ([
     (container w h middle <|
       collage gameWidth gameHeight
@@ -317,26 +311,19 @@ ballDiv ball =
         ] []
     ]
   
-makeSignalMessage : Int -> Signal.Address RadiusMessage -> String -> Signal.Message
-makeSignalMessage ballId address radius = 
-  Signal.message address <| makeMessage ballId radius
-  
 -- Signals
 
-main =
-  Signal.map3 view radiusSignal.signal Window.dimensions gameState 
+main = Signal.map2 view Window.dimensions gameState 
 
 gameState : Signal Game
-gameState =
-  Signal.foldp update defaultGame inputs
+gameState = Signal.foldp update defaultGame inputs
 
 addSignal : Signal.Mailbox Bool
 addSignal = Signal.mailbox False
 
 radiusSignal = Signal.mailbox defaultMessage
 
-delta =
-  Signal.map inSeconds (fps 35)
+delta = Signal.map inSeconds (fps 35)
 
 inputs : Signal UpdateInputs
 inputs =
