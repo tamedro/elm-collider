@@ -1,4 +1,4 @@
-To run
+To run:
 
 1. Install elm
 
